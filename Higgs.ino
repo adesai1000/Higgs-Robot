@@ -20,6 +20,8 @@ bool eyesOpen = true;
 unsigned long eyesLastChange = 0;
 unsigned long lastFrame = 0;
 const int FRAME_MS = 33;      // redraw the face ~30 times a second
+unsigned long lastPrint = 0;
+const int PRINT_MS = 200;     // print servo angles 5 times a second
 
 void onConnected(ControllerPtr ctl)    { Serial.println("Controller connected");    pad = ctl; }
 void onDisconnected(ControllerPtr ctl) { Serial.println("Controller disconnected"); pad = nullptr; }
@@ -65,6 +67,13 @@ void updateBlink(unsigned long now) {
   }
 }
 
+// prints the angles so you can read off leg poses in the Serial Monitor
+void printAngles(unsigned long now) {
+  if (now - lastPrint < PRINT_MS) return;
+  lastPrint = now;
+  Serial.printf("hip (13): %3d   knee (14): %3d\n", leftAngle, rightAngle);
+}
+
 void drawFace() {
   display.clearDisplay();
   if (eyesOpen) {
@@ -96,6 +105,7 @@ void loop() {
   unsigned long now = millis();
   readInput();
   updateServos();
+  printAngles(now);
   updateBlink(now);
   if (now - lastFrame >= FRAME_MS) {
     lastFrame = now;
