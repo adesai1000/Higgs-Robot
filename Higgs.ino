@@ -15,6 +15,7 @@ int  rightAngle = 90;
 int  lookX = 0;               // eye offset in pixels, -10..10
 int  lookY = 0;               // -6..6
 bool eyesOpen = true;
+bool walking = false;         // true while R1 is held
 
 // ---- timers ----
 unsigned long eyesLastChange = 0;
@@ -23,8 +24,21 @@ const int FRAME_MS = 33;      // redraw the face ~30 times a second
 unsigned long lastPrint = 0;
 const int PRINT_MS = 200;     // print servo angles 5 times a second
 
+// ---- gait: one leg cycling through four poses ----
+struct Pose { int hip; int knee; };
+const Pose STEP[] = {
+  { 70,  90},   // foot down, back
+  { 70, 120},   // lift
+  {110, 120},   // swing forward
+  {110,  90},   // plant; moving to the first pose again is the drag back
+};
+const int STEP_COUNT = 4;
+const int STEP_MS = 400;      // time spent on each pose
+int stepIndex = 0;
+unsigned long lastStep = 0;
+
 void onConnected(ControllerPtr ctl)    { Serial.println("Controller connected");    pad = ctl; }
-void onDisconnected(ControllerPtr ctl) { Serial.println("Controller disconnected"); pad = nullptr; }
+void onDisconnected(ControllerPtr ctl) { Serial.println("Controller disconnected"); pad = nullptr; walking = false; }
 
 int applyDeadzone(int axis) {
   const int DEADZONE = 40;
@@ -41,6 +55,7 @@ void readInput() {
 
   leftAngle  = stickToAngle(pad->axisX());
   rightAngle = stickToAngle(pad->axisRX());
+  walking    = pad->r1();
 
   // eyes follow whichever stick is being pushed
   int x = applyDeadzone(pad->axisX());
@@ -51,6 +66,17 @@ void readInput() {
   }
   lookX = map(x, -512, 511, -10, 10);
   lookY = map(y, -512, 511, -6, 6);
+}
+
+// ---- gait: while walking, steps through STEP and writes the angles ----
+void updateGait(unsigned long now) {
+  if (!walking) return;
+  if (now - lastStep >= STEP_MS) {
+    lastStep = now;
+    stepIndex = (stepIndex + 1) % STEP_COUNT;
+  }
+  leftAngle  = STEP[stepIndex].hip;
+  rightAngle = STEP[stepIndex].knee;
 }
 
 // ---- outputs: render state to hardware ----
@@ -104,6 +130,7 @@ void setup() {
 void loop() {
   unsigned long now = millis();
   readInput();
+  updateGait(now);
   updateServos();
   printAngles(now);
   updateBlink(now);
